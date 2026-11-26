@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Emberline Air — Meridian Archipelago Courier</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1626; font-family: Arial, Helvetica, sans-serif; }
+  #game-canvas { display: block; width: 100%; height: 100%; }
+  .panel { background: rgba(10, 22, 38, 0.72); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 10px; color: #fff; backdrop-filter: blur(2px); }
+  .label { font-size: 10px; letter-spacing: 2px; color: #9fc4e8; font-weight: bold; }
+  .big { font-size: 26px; font-weight: bold; line-height: 1.05; }
+
+  /* Top-left: the flight instruments */
+  #hud-instruments { position: absolute; top: 14px; left: 14px; padding: 12px 16px; min-width: 168px; }
+  #hud-instruments .row { display: flex; justify-content: space-between; gap: 18px; margin-top: 4px; }
+  #hud-vs { font-size: 13px; font-weight: bold; }
+
+  /* Top-centre: compass strip + mission + score */
+  #hud-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #hud-compass { display: flex; justify-content: center; gap: 14px; padding: 6px 14px; font-size: 13px; font-weight: bold; color: #9fc4e8; }
+  #hud-compass span.on { color: #ffd23f; font-size: 15px; }
+  #hud-mission-bar { margin-top: 8px; padding: 8px 18px; display: inline-block; }
+  #hud-mission { font-size: 15px; font-weight: bold; letter-spacing: 1px; color: #ffd23f; }
+  #hud-objective { font-size: 13px; margin-top: 2px; max-width: 560px; }
+  #hud-next-ring { font-size: 12px; color: #7dff9a; font-weight: bold; margin-top: 2px; }
+
+  /* Top-right: score + clock */
+  #hud-score-box { position: absolute; top: 14px; right: 14px; padding: 10px 16px; text-align: right; min-width: 150px; }
+  #hud-score { font-size: 30px; font-weight: bold; color: #ffd23f; }
+
+  /* Bottom-left: throttle / fuel / hull */
+  #hud-systems { position: absolute; left: 14px; bottom: 14px; padding: 12px 14px; width: 230px; }
+  .bar-row { margin-top: 8px; }
+  .bar-row .bar-label { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+  .bar { height: 10px; background: rgba(255,255,255,0.16); border-radius: 5px; margin-top: 3px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 5px; transition: width 0.15s; }
+  #hud-flaps, #hud-gear { display: inline-block; margin-top: 9px; margin-right: 8px; font-size: 11px; font-weight: bold; color: #9fc4e8; border: 1px solid rgba(255,255,255,0.25); border-radius: 5px; padding: 3px 8px; }
+
+  /* Bottom-right: attitude + minimap */
+  #hud-right { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 12px; align-items: flex-end; }
+  #hud-attitude, #hud-minimap { border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(10, 22, 38, 0.72); }
+  .hud-caption { font-size: 10px; letter-spacing: 2px; color: #9fc4e8; font-weight: bold; text-align: center; margin-top: 4px; }
+
+  /* Centre banner */
+  #hud-banner-wrap { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); text-align: center; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  #hud-banner-wrap.show { opacity: 1; }
+  #hud-banner { font-size: 44px; font-weight: bold; color: #fff; text-shadow: 0 3px 18px rgba(0,0,0,0.7); letter-spacing: 2px; }
+  #hud-banner-sub { font-size: 17px; color: #ffd23f; text-shadow: 0 2px 10px rgba(0,0,0,0.7); margin-top: 6px; }
+
+  /* Warning strip */
+  #hud-warn { position: absolute; bottom: 170px; left: 50%; transform: translateX(-50%); background: rgba(180, 20, 20, 0.85); color: #fff; font-weight: bold; font-size: 17px; letter-spacing: 1px; padding: 8px 20px; border-radius: 8px; display: none; }
+
+  /* Controls hint */
+  #hud-controls { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.75); font-size: 11px; letter-spacing: 0.5px; text-shadow: 0 1px 4px rgba(0,0,0,0.8); white-space: nowrap; }
+
+  /* Menu */
+  #menu { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(6,14,26,0.55) 0%, rgba(6,14,26,0.82) 100%); color: #fff; z-index: 10; }
+  #menu.hidden { display: none; }
+  #menu h1 { font-size: 64px; letter-spacing: 6px; color: #ffd23f; text-shadow: 0 4px 24px rgba(0,0,0,0.6); }
+  #menu h2 { font-size: 19px; font-weight: normal; color: #cfe4f2; margin-top: 6px; letter-spacing: 1px; }
+  #menu-cards { display: flex; gap: 14px; margin-top: 30px; flex-wrap: wrap; justify-content: center; max-width: 980px; }
+  .mission-card { width: 220px; text-align: left; background: rgba(16, 34, 56, 0.88); border: 1px solid rgba(255, 210, 63, 0.45); border-radius: 12px; color: #fff; padding: 16px; cursor: pointer; font-family: inherit; }
+  .mission-card:hover { background: rgba(38, 68, 100, 0.92); border-color: #ffd23f; }
+  .mc-num { display: inline-block; background: #ffd23f; color: #0a1626; font-weight: bold; border-radius: 50%; width: 26px; height: 26px; line-height: 26px; text-align: center; font-size: 14px; }
+  .mc-name { display: block; font-size: 18px; font-weight: bold; margin-top: 10px; }
+  .mc-goal { display: block; font-size: 13px; color: #cfe4f2; margin-top: 6px; line-height: 1.45; min-height: 56px; }
+  .mc-par { display: block; font-size: 11px; letter-spacing: 1px; color: #9fc4e8; margin-top: 8px; }
+  #menu-actions { margin-top: 22px; display: flex; gap: 12px; }
+  #menu-actions button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.35); color: #fff; border-radius: 8px; padding: 10px 18px; font-size: 14px; cursor: pointer; font-family: inherit; }
+  #menu-actions button:hover { background: rgba(255,255,255,0.22); }
+  #howto { display: none; margin-top: 16px; background: rgba(10,22,38,0.85); border-radius: 10px; padding: 14px 20px; font-size: 13px; line-height: 1.7; color: #dbeaf6; max-width: 640px; }
+  #howto.open { display: block; }
+  #howto b { color: #ffd23f; }
+  #menu-foot { margin-top: 20px; font-size: 12px; color: #9fc4e8; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<!-- Instruments -->
+<div id="hud-instruments" class="panel">
+  <div class="label">AIRSPEED</div>
+  <div class="big" id="hud-speed">0 kt</div>
+  <div class="row"><div><div class="label">ALTITUDE</div><div class="big" id="hud-alt">0 ft</div></div>
+  <div style="text-align:right"><div class="label">VERT SPEED</div><div id="hud-vs">+0 fpm</div></div></div>
+  <div style="margin-top:6px"><div class="label">HEADING</div><div class="big" id="hud-hdg">090° E</div></div>
+</div>
+
+<!-- Compass + mission -->
+<div id="hud-top">
+  <div id="hud-compass" class="panel"></div>
+  <div id="hud-mission-bar" class="panel">
+    <div id="hud-mission">FREE FLIGHT</div>
+    <div id="hud-objective">Fly the archipelago — pick a mission with keys 1–4.</div>
+    <div id="hud-next-ring"></div>
+  </div>
+</div>
+
+<!-- Score + clock -->
+<div id="hud-score-box" class="panel">
+  <div class="label">SCORE</div>
+  <div id="hud-score">00000</div>
+  <div class="label" style="margin-top:4px">TIME <span id="hud-time" style="color:#fff;font-size:14px">00:00</span></div>
+</div>
+
+<!-- Systems -->
+<div id="hud-systems" class="panel">
+  <div class="bar-row"><div class="bar-label"><span>THROTTLE</span><span id="hud-thr-text">THR 0%</span></div><div class="bar"><div id="hud-thr-bar" style="width:0%;background:#ffd23f"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>FUEL</span><span id="hud-fuel-text">FUEL 100%</span></div><div class="bar"><div id="hud-fuel-bar" style="width:100%;background:#37d67a"></div></div></div>
+  <div class="bar-row"><div class="bar-label"><span>HULL</span><span id="hud-hull-text">HULL 100%</span></div><div class="bar"><div id="hud-hull-bar" style="width:100%;background:#37d67a"></div></div></div>
+  <span id="hud-flaps">FLAPS UP</span><span id="hud-gear">GEAR DOWN</span>
+</div>
+
+<!-- Attitude + minimap -->
+<div id="hud-right">
+  <div><canvas id="hud-attitude" width="132" height="132"></canvas><div class="hud-caption">ATTITUDE</div></div>
+  <div><canvas id="hud-minimap" width="168" height="168"></canvas><div class="hud-caption">CHART</div></div>
+</div>
+
+<!-- Banner + warning + controls -->
+<div id="hud-banner-wrap"><div id="hud-banner"></div><div id="hud-banner-sub"></div></div>
+<div id="hud-warn"></div>
+<div id="hud-controls">↑↓ pitch · ←→ bank · W/S throttle · Q/E rudder · Space brake · F flaps · G gear · C camera · P pause · M sound · R restart · 1–4 missions</div>
+
+<!-- Menu -->
+<div id="menu">
+  <h1>EMBERLINE AIR</h1>
+  <h2>Meridian Archipelago Courier — fly the Kestrel-9, mind the fuel, land her gentle.</h2>
+  <div id="menu-cards"></div>
+  <div id="menu-actions">
+    <button id="menu-free">Free flight</button>
+    <button id="menu-how">How to fly</button>
+  </div>
+  <div id="howto">
+    <b>Take off:</b> hold W to spool the engine, then pull ↑ once past 55 kt. <b>Fly:</b> ← → banks the wings and turns the nose; ↑ ↓ pitches. Keep speed above 47 kt or she stalls.
+    <b>Land:</b> slow to 60 kt, flaps down (F), gear down (G), flare gently — a soft touchdown on the centreline scores. <b>Fuel:</b> burns with throttle; park on any strip to refuel.
+    <b>Damage:</b> hard landings and hillsides hurt the hull. <b>Mouse:</b> hold and drag to steer. <b>Camera:</b> C switches chase / near.
+  </div>
+  <div id="menu-foot">A bush-pilot game for make.fun — original world, aircraft, art and sound. No network, no install.</div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
